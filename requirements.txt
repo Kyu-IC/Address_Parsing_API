@@ -1,1 +1,3 @@
 fastapi[all]
+typhoon-ocr
+openai
