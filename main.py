@@ -5,16 +5,18 @@ from dotenv import load_dotenv
 import os 
 import json
 from openai import OpenAI
+from pydantic import BaseModel
 
 app = FastAPI()
 
-
+class Address(BaseModel):
+    text : str
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
 
 @app.post("/parsing/")
-def address_to_json(text : str) -> str:
+def address_to_json(address : Address) :
         
     load_dotenv()
 
@@ -26,7 +28,21 @@ def address_to_json(text : str) -> str:
         base_url="https://api.opentyphoon.ai/v1"
     )
 
-    prompt = text
+    prompt = f"""
+You are a helpful assistant that extracts information from text into structured JSON format.
+Extract the following information from the text  and return it as a valid JSON object with these fields structure:
+
+บ้านเลขที่  : values
+หมู่ : values
+ถนน : values
+ตำบล: values
+อำเภอ: values
+จังหวัด: values
+
+Text: {address.text}
+
+Important: Respond ONLY with the JSON object, with NO additional text.
+"""
 
     response = client.chat.completions.create(
         model="typhoon-v2.5-30b-a3b-instruct",
@@ -35,11 +51,14 @@ def address_to_json(text : str) -> str:
         max_tokens=1500
     )
 
+    content = response.choices[0].message.content
+
+    # content is a *string* that itself contains JSON; parse it:
     try:
-        # Parse the response as JSON
-        structured_data = json.loads(response.choices[0].message.content)
-        print(json.dumps(structured_data, indent=2, ensure_ascii=False))
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        print("Raw response:", response.choices[0].message.content)
-    return response
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        # fallback: return raw for debugging
+        return {"error": "model did not return valid JSON", "raw": content}
+
+    # this is what your Postman request will now see
+    return data
